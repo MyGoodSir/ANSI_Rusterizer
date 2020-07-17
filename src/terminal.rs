@@ -1,56 +1,121 @@
-
+use winapi::ctypes::c_void;
+use winapi::shared::ntdef::NULL;
+use winapi::shared::windef::HWND;
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use winapi::um::processenv::GetStdHandle;
 use winapi::um::winbase::STD_OUTPUT_HANDLE;
-use winapi::um::winnt::HANDLE;
-use winapi::um::wincon::{GetConsoleScreenBufferInfo, 
-    CONSOLE_SCREEN_BUFFER_INFO,
-    PCONSOLE_SCREEN_BUFFER_INFOEX,
+use winapi::um::winnt::{HANDLE, PCUWSTR, PUWSTR};
+use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
+use winapi::um::wingdi::{FF_DONTCARE, FW_NORMAL};
+use winapi::um::wincon::{
+    GetConsoleWindow,
+    GetLargestConsoleWindowSize,
+    SetConsoleWindowInfo,
+    GetConsoleScreenBufferInfo, 
     CreateConsoleScreenBuffer,
-    CHAR_INFO,
-    SetConsoleActiveScreenBuffer, COORD, SMALL_RECT};
+    SetConsoleActiveScreenBuffer,
+    SetConsoleScreenBufferSize,
+    SetCurrentConsoleFontEx,
+    CONSOLE_SCREEN_BUFFER_INFO,
+    CONSOLE_SCREEN_BUFFER_INFOEX,
+    CONSOLE_FONT_INFOEX,
+    CHAR_INFO, COORD, SMALL_RECT};
+
+
+    const CONSOLE_TEXTMODE_BUFFER: u32 = 1u32;
+    const FILE_SHARE_READ: u32 = 1u32;
+    const FILE_SHARE_WRITE: u32 = 2u32;
+    const GENERIC_READ: u32 = 0x80000000;
+    const GENERIC_WRITE: u32 = 0x40000000;
 
 pub struct Terminal{
-    pub console_handles: Vec<HANDLE>,
+    pub console_handles: [HANDLE; 2],
     pub width: u32, pub height:u32,
+    pub wHndl: HWND,
 
-}
+} 
 impl Terminal{
-pub fn get_handles(&mut self){
-    let hndl = unsafe{GetStdHandle(STD_OUTPUT_HANDLE)};
-    self.console_handles.push(hndl);
-}
-pub fn get_terminal_size(&mut self){
-    let hndl = self.console_handles[0];
-    if hndl == INVALID_HANDLE_VALUE {
-        return ();
-    }
-    let cc = COORD{X:0,Y:0};
-    let mut csbi = CONSOLE_SCREEN_BUFFER_INFO {
-        dwSize: cc,
-        dwCursorPosition: cc,
-        wAttributes: 0,
-        srWindow: SMALL_RECT{
-            Left:0,
-            Right:0,
-            Top:0,
-            Bottom:0,
-        },
-        dwMaximumWindowSize: cc,
-    };
-    if unsafe{ GetConsoleScreenBufferInfo(hndl, &mut csbi) } == 0 {
-        return ();
-    }
-    self.width = (csbi.srWindow.Right - csbi.srWindow.Left + 1) as u32;
-    self.height = (csbi.srWindow.Bottom - csbi.srWindow.Top + 1) as u32;
-}
-pub fn write_buffer(&mut self, buff: [char]){
+    pub fn get_handles(&mut self){
+        let hndl = unsafe{GetStdHandle(STD_OUTPUT_HANDLE)};
+        if hndl == INVALID_HANDLE_VALUE {
+            panic!("Invalid Handle!!!");
+        }
+        self.console_handles[0] = hndl;
 
-}
-pub fn swap_buffers(&mut self){
+        //I had to hack this together for four hours before it started working.
+        let s = std::mem::size_of::<SECURITY_ATTRIBUTES>();
+        let address = 0x0usize;
+        let lpvoid = address as *mut c_void; 
+        let sv: *const SECURITY_ATTRIBUTES = &SECURITY_ATTRIBUTES {nLength: s as u32,lpSecurityDescriptor: lpvoid ,bInheritHandle: 0i32};
+        let h_new_screen_buffer = unsafe{CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, sv, CONSOLE_TEXTMODE_BUFFER, NULL)};
+
+        if h_new_screen_buffer == INVALID_HANDLE_VALUE {
+            panic!("Invalid Handle!!!");
+        }
+        self.console_handles[1] = h_new_screen_buffer;
+
+
+    }
+    pub fn get_terminal_size(&mut self){
+        let hndl = self.console_handles[0];
+        let cc = COORD{X:0,Y:0};
+        let mut csbi = CONSOLE_SCREEN_BUFFER_INFO {
+            dwSize: cc,
+            dwCursorPosition: cc,
+            wAttributes: 0,
+            srWindow: SMALL_RECT{
+                Left:0,
+                Right:0,
+                Top:0,
+                Bottom:0,
+            },
+            dwMaximumWindowSize: cc,
+        };
+        if unsafe{ GetConsoleScreenBufferInfo(hndl, &mut csbi) } == 0 {
+            return ();
+        }
+        self.width = (csbi.srWindow.Right - csbi.srWindow.Left + 1) as u32;
+        self.height = (csbi.srWindow.Bottom - csbi.srWindow.Top + 1) as u32;
+    }
+    pub fn resize_buffer(&mut self, width: i16, height: i16){
+        unsafe{SetConsoleScreenBufferSize(self.console_handles[0], COORD{X:width, Y:height})};
+        unsafe{SetConsoleScreenBufferSize(self.console_handles[1], COORD{X:width, Y:height})};
+    }
+    pub fn resize_window(&mut self, width: i16, height: i16){
+        let r_coord = unsafe{GetLargestConsoleWindowSize(self.console_handles[0])};
+        let mut rect = Box::new(SMALL_RECT{Left: 0, Top:0, Right:r_coord.X, Bottom:r_coord.Y});
+        unsafe{SetConsoleWindowInfo(self.console_handles[0], 1, &mut *rect )};
+    }
+    pub fn write_buffer(&mut self, buff: &[char]){
     
+    }
+    pub fn swap_buffers(&mut self){
+        
+    }
+    pub fn setup_font(&mut self, size: i16){unsafe{
+        let fn_staging: [u16;32] = ['C' as u16,'o' as u16,'n' as u16,'s' as u16,'o' as u16,'l' as u16,'a' as u16,'s' as u16,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,] ;
+        let cfi: *mut  CONSOLE_FONT_INFOEX;
+        let mut cfi2 = Box::new(CONSOLE_FONT_INFOEX{
+        cbSize: std::mem::size_of::<CONSOLE_FONT_INFOEX>() as u32,
+        nFont: 0,
+        dwFontSize: COORD{X:0, Y:size},                  // Height
+        FontFamily: FF_DONTCARE,
+        FontWeight: FW_NORMAL as u32,
+        FaceName: fn_staging, // Choose your font
+
+        });
+        cfi = &mut *cfi2;
+
+        SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), 0, cfi );
+    }}
 }
-}
+
+/*
+
+
+*/
+
+
 
 /*
 HANDLE hStdout, hNewScreenBuffer; 

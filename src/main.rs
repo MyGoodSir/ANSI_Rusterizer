@@ -1,9 +1,16 @@
 //create a char buffer object
 //write the whole buffer to console
+//SetConsoleWindowInfo to resize actual console window, not just buffer size
+//implement the double buffs
+//implement the CHAR_INFO buffer
+use winapi::um::wincon::GetConsoleWindow;
+use winapi::shared::windef::HWND;
+
 use std::io::{Write, stdout};
 use std::fmt;
 mod terminal;
 pub use terminal::*;
+use winapi::um::winnt::HANDLE;
 
 struct GraphicsTerminal{
     width: i32,
@@ -14,9 +21,10 @@ struct GraphicsTerminal{
 fn main() {
 
 
-    let mut console = Terminal{ console_handles: Vec::new(), width: 0, height: 0};
+    let mut console = unsafe{Terminal{ console_handles: [0 as HANDLE;2], width: 0, height: 0, wHndl: GetConsoleWindow()}};
     console.get_handles();
     clear_terminal();
+    console.setup_font(4);
     let fg = ansi_color_value::bright_green as u8;
     let bg = ansi_color_value::bright_blue as u8;
     let gb_profile = ansi_color{ foreground:fg, background:bg};
@@ -31,6 +39,10 @@ fn main() {
     console.get_terminal_size();
     width = console.width;
     height = console.height;
+    width *= 6;
+    height *= 6;
+    console.resize_buffer(width as i16, height as i16);
+    console.resize_window(width as i16, height as i16);
     let bit_buff = create_bit_buff(width,height);
     let mut j = 0;
     loop{
