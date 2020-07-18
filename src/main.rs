@@ -1,6 +1,5 @@
 //create a char buffer object
 //write the whole buffer to console
-//SetConsoleWindowInfo to resize actual console window, not just buffer size
 //implement the double buffs
 //implement the CHAR_INFO buffer
 use winapi::um::wincon::GetConsoleWindow;
@@ -11,6 +10,9 @@ use std::fmt;
 mod terminal;
 pub use terminal::*;
 use winapi::um::winnt::HANDLE;
+use std::time::Duration;
+use std::time::Instant;
+use std::ffi::CString;
 
 struct GraphicsTerminal{
     width: i32,
@@ -21,57 +23,50 @@ struct GraphicsTerminal{
 fn main() {
 
 
-    let mut console = unsafe{Terminal{ console_handles: [0 as HANDLE;2], width: 0, height: 0, wHndl: GetConsoleWindow()}};
+    let mut console = unsafe{Terminal{ console_handles: [0 as HANDLE;2], 
+        width: 0, height: 0, wHndl: GetConsoleWindow(), current_buffer: 0}};
     console.get_handles();
+    hide_cursor();
     clear_terminal();
-    console.setup_font(4);
+    console.setup_font(32);
     let fg = ansi_color_value::bright_green as u8;
-    let bg = ansi_color_value::bright_blue as u8;
-    let gb_profile = ansi_color{ foreground:fg, background:bg};
+    let bg = ansi_color_value::black as u8;
+    let mut gb_profile = ansi_color{ foreground:fg, background:bg};
     set_foreground_color(&gb_profile);
-    set_background_color(&gb_profile);
+    //set_background_color(&gb_profile);
     //println!("▄▄▄▄▄▄▄▄");//pixel
     
-    alt_buff();
-    clear_terminal();
-    main_buff();
-    let (mut width, mut height) = (0,0);
+    let (mut width, mut height);
+    console.resize_window(800, 600);
     console.get_terminal_size();
     width = console.width;
     height = console.height;
-    width *= 6;
-    height *= 6;
+    //width *= 6;
+    //height *= 6;
     console.resize_buffer(width as i16, height as i16);
-    console.resize_window(width as i16, height as i16);
     let bit_buff = create_bit_buff(width,height);
+    let pbuff = &render_loop(width,height, &bit_buff);
     let mut j = 0;
     loop{
-        render_loop(width,height, &bit_buff);
         clear_terminal();
-        if j > 500 {break;}
+        hide_cursor();
+        if j > 5000 {break;}
         j+=1;
+
+        match j%60{
+            (0..=20) => gb_profile = ansi_color{ foreground: ansi_color_value::cyan as u8, background:bg},
+            (20..=40) => gb_profile = ansi_color{ foreground: ansi_color_value::magenta as u8, background:bg},
+            _ => gb_profile = ansi_color{ foreground: ansi_color_value::bright_green as u8, background:bg},
+        }
+
+        set_foreground_color(&gb_profile);
+        console.swap_buffers();
+        console.write_buffer(pbuff);
     }
     reset_ansi_attribs();
 }
 
-pub struct ToFrontBuff;
-pub struct ToBackBuff;
 
-impl fmt::Display for ToFrontBuff{
-    fn fmt(&self, fmtr: &mut fmt::Formatter) -> fmt::Result{
-        write!(fmtr, "\x1B[?1049l")
-    }
-}
-
-impl fmt::Display for ToBackBuff{
-    fn fmt(&self, fmtr: &mut fmt::Formatter) -> fmt::Result{
-        write!(fmtr, "\x1B[?1049h")
-    }
-}
-
-pub struct OutBuff<W: Write>{
-    t_out: W,
-}
 fn create_bit_buff(width: u32, height: u32) -> Vec<u32>{
     let mut i = 0;
     let mut buff = Vec::new();
@@ -83,19 +78,19 @@ fn create_bit_buff(width: u32, height: u32) -> Vec<u32>{
     buff
 }
 
-fn render_loop(width: u32, height: u32, bit_buffer: &Vec<u32>){
-    let mut pix_buff = String::new();
+fn render_loop(width: u32, height: u32, bit_buffer: &Vec<u32>) -> CString{
+    let mut pix_buff = Vec::<u8>::new();
     let mut i = 0;
     'outer: loop{
         let mut j = 0;
         'inner: loop{
             let pos = (i*width+j) as usize;
             if (bit_buffer[pos] & (pix_flags::bottom as u32) != (pix_flags::bottom as u32)) && (bit_buffer[pos] & (pix_flags::top as u32) != (pix_flags::top as u32)){
-                pix_buff.push('█');
+                pix_buff.push('█' as u8);
             }else if bit_buffer[pos] & (pix_flags::bottom as u32) != (pix_flags::bottom as u32) {
-                pix_buff.push('▄');
+                pix_buff.push('▄' as u8);
             }else{
-                pix_buff.push('▀');
+                pix_buff.push('▀' as u8);
             }
             //print!("▄");
             j=j+1;
@@ -108,7 +103,11 @@ fn render_loop(width: u32, height: u32, bit_buffer: &Vec<u32>){
             break 'outer;
         }
     }
-    print!("{}",pix_buff);
+    let op = CString::new(pix_buff);
+    match op{
+        Ok(o) => o,
+        Err(e) => panic!("o no")
+    }
 }
 
 enum pix_flags{
@@ -145,6 +144,7 @@ pub enum ansi_color_value{
 fn clear_terminal(){
     print!("\x1B[2J");//clear shown
     print!("\x1B[3J");//clear backlog
+    print!("\x1B[1;1H");//reset cursor to top
 }
 
 fn set_foreground_color(col: &ansi_color){
@@ -157,6 +157,14 @@ fn set_background_color(col: &ansi_color){
 
 fn reset_ansi_attribs(){
     print!("\x1B[0m");
+}
+
+fn hide_cursor(){
+    print!("\x1B[?25l");
+}
+
+fn show_cursor(){
+    print!("\x1B[?25h");
 }
 
 fn alt_buff(){

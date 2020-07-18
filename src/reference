@@ -5,3 +5,5 @@ https://docs.rs/winapi/0.3.8/winapi/um/wincon/index.html
 https://en.wikipedia.org/wiki/Block_Elements
 
 https://en.wikipedia.org/wiki/ANSI_escape_code
+
+https://doc.rust-lang.org/std/ffi/struct.OsString.html
