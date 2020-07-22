@@ -1,3 +1,4 @@
+
 use std::fmt;
 use winapi::ctypes::c_void;
 use winapi::shared::ntdef::NULL;
@@ -6,25 +7,23 @@ use winapi::um::winuser::{MoveWindow, GetWindowRect};
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use winapi::um::processenv::GetStdHandle;
 use winapi::um::winbase::STD_OUTPUT_HANDLE;
-use winapi::um::winnt::{HANDLE, CHAR};
+use winapi::um::winnt::{HANDLE, LPCWSTR};
 use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
 use winapi::um::wingdi::{FF_DONTCARE, FW_NORMAL};
-use winapi::um::wincontypes::CHAR_INFO_Char;
-use std::ffi::CString;
-use std::mem::size_of;
+use std::ffi::OsString;
+use std::os::windows::prelude::*;
 use winapi::um::wincon::{
     GetConsoleWindow,
     SetConsoleWindowInfo,
-    WriteConsoleOutputCharacterA,
+    WriteConsoleOutputCharacterW,
     GetConsoleScreenBufferInfo, 
     CreateConsoleScreenBuffer,
     SetConsoleActiveScreenBuffer,
     SetConsoleScreenBufferSize,
     SetCurrentConsoleFontEx,
     CONSOLE_SCREEN_BUFFER_INFO,
-    CONSOLE_SCREEN_BUFFER_INFOEX,
     CONSOLE_FONT_INFOEX,
-    CHAR_INFO, COORD, SMALL_RECT};
+    COORD, SMALL_RECT};
 
 
     const CONSOLE_TEXTMODE_BUFFER: u32 = 1u32;
@@ -33,6 +32,7 @@ use winapi::um::wincon::{
     const GENERIC_READ: u32 = 0x80000000;
     const GENERIC_WRITE: u32 = 0x40000000;
 
+#[derive(Debug)]
 pub struct Terminal{
     pub console_handles: [HANDLE; 2],
     pub width: u32, pub height:u32,
@@ -40,9 +40,13 @@ pub struct Terminal{
 
 } 
 impl Terminal{
+    pub fn new() -> Terminal{
+        unsafe{Terminal{ console_handles: [0 as HANDLE;2], 
+        width: 0, height: 0, wHndl: GetConsoleWindow(), current_buffer: 0}}
+    }
 
     pub fn get_handles(&mut self){
-        let hndl = unsafe{GetStdHandle(STD_OUTPUT_HANDLE)};
+        let hndl = unsafe{ GetStdHandle(STD_OUTPUT_HANDLE) };
         if hndl == INVALID_HANDLE_VALUE {
             panic!("Invalid Handle!!!");
         }
@@ -53,7 +57,12 @@ impl Terminal{
         let address = 0x0usize;
         let lpvoid = address as *mut c_void; 
         let sv: *const SECURITY_ATTRIBUTES = &SECURITY_ATTRIBUTES {nLength: s as u32,lpSecurityDescriptor: lpvoid ,bInheritHandle: 0i32};
-        let h_new_screen_buffer = unsafe{CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, sv, CONSOLE_TEXTMODE_BUFFER, NULL)};
+        let h_new_screen_buffer = unsafe{
+            CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE,
+                                      FILE_SHARE_READ | FILE_SHARE_WRITE, 
+                                      sv, CONSOLE_TEXTMODE_BUFFER, 
+                                      NULL)
+                                    };
 
         if h_new_screen_buffer == INVALID_HANDLE_VALUE {
             panic!("Invalid Handle!!!");
@@ -81,8 +90,8 @@ impl Terminal{
     }
 
     pub fn resize_buffer(&mut self, width: i16, height: i16){
-        unsafe{SetConsoleScreenBufferSize(self.console_handles[0], COORD{X:width, Y:height})};
-        unsafe{SetConsoleScreenBufferSize(self.console_handles[1], COORD{X:width, Y:height})};
+        unsafe{SetConsoleScreenBufferSize(self.console_handles[0], COORD{X:self.width as i16, Y:self.height as i16})};
+        unsafe{SetConsoleScreenBufferSize(self.console_handles[1], COORD{X:self.width as i16, Y:self.height as i16})};
     }
 
     pub fn resize_window(&mut self, width: i32, height: i32){
@@ -92,13 +101,13 @@ impl Terminal{
         unsafe{MoveWindow(self.wHndl, console_rect.left, console_rect.top, width, height, 0)};
     }
 
-    pub fn write_buffer(&mut self, buff: &CString){
-        let bout: *const CHAR = buff.as_ptr() ;
+    pub fn write_buffer(&mut self, buff: &OsString){
         let rect = Box::new(SMALL_RECT{Top:0, Left:0, Right:self.width as i16, Bottom:self.height as i16});
         //let rectptr: *mut SMALL_RECT = Box::<SMALL_RECT>::into_raw(rect) ;
+        let bvec: Vec<u16> = buff.encode_wide().collect();
         unsafe{
-        WriteConsoleOutputCharacterA(self.console_handles[self.current_buffer as usize], 
-            bout, buff.as_bytes().len() as u32, COORD{X:0,Y:0}, 
+        WriteConsoleOutputCharacterW(self.console_handles[self.current_buffer as usize], 
+            bvec.as_ptr() , buff.len() as u32, COORD{X:0,Y:0}, 
             Box::<SMALL_RECT>::into_raw(rect) as *mut u32);
         }
 
@@ -108,11 +117,8 @@ impl Terminal{
     pub fn swap_buffers(&mut self){
         self.current_buffer ^= 1;
 
-        match self.current_buffer{
-            0 => print!("\x1B[?1049l"),
-            1 => print!("\x1B[?1049h"),
-            _ => ()
-        }
+        unsafe{ SetConsoleActiveScreenBuffer(self.console_handles[self.current_buffer as usize]) };
+        
     }
 
     pub fn setup_font(&mut self, size: i16){
@@ -123,17 +129,45 @@ impl Terminal{
                     CONSOLE_FONT_INFOEX{
                         cbSize: std::mem::size_of::<CONSOLE_FONT_INFOEX>() as u32,
                         nFont: 0,
-                        dwFontSize: COORD{X:0, Y:size},                  // Height
+                        dwFontSize: COORD{X:size, Y:size*2},                  // Height
                         FontFamily: FF_DONTCARE,
                         FontWeight: FW_NORMAL as u32,
                         FaceName: fn_staging, // Choose your font
                     }
                 );
             cfi = &mut *cfi2;
-            SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), 0, cfi );
+            SetCurrentConsoleFontEx(self.console_handles[0], 0, cfi );
+            SetCurrentConsoleFontEx(self.console_handles[1], 0, cfi );
         }
     }
-}
+
+    pub fn clear(&mut self){
+        print!("\x1B[2J");//clear shown
+        print!("\x1B[3J");//clear backlog
+        print!("\x1B[1;1H");//reset cursor to top
+    }
+
+    pub fn reset_ansi_attribs(&mut self){
+        print!("\x1B[0m");
+    }
+    
+    pub fn hide_cursor(&mut self){
+        print!("\x1B[?25l");
+    }
+    
+    pub fn show_cursor(&mut self){
+        print!("\x1B[?25h");
+    }
+    
+    pub fn _alt_buff(&mut self){
+        print!("\x1B[?1049h");
+    }
+    
+    pub fn _main_buff(&mut self){
+        print!("\x1B[?1049l");
+    }
+    
+    }
 
 /*
 pub struct ToFrontBuff;
