@@ -17,26 +17,19 @@ use std::os::windows::prelude::*;
 
 
 fn main() {
-
-
     let mut console = Terminal::new();
     console.get_handles();
     console.setup_font(4);
-    console.resize_window(800, 800);
+    console.resize_window(1280, 720);
     console.get_terminal_size();
-    //console.resize_buffer(width as i16, height as i16);
-    let fg = ansi_color_value::bright_green as u8;
-    let bg = ansi_color_value::black as u8;
-    let mut gb_profile = ansi_color{ foreground:fg, background:bg};
-    set_foreground_color(&gb_profile);
+    console.resize_buffer(console.width as i16, console.height as i16);
     
     console.hide_cursor();
     console.clear();
     let mut rn = Renderer::new(console.width as i32, console.height as i32);
     rn.init_pbuff();
-    rn.draw_circle(25, 50,50);
+    rn.draw_circle(25, 50, 50);
     rn.bits_to_px(); 
-    //rn.dbg_prnt_fbuff();
     let pbuff = rn.px_to_string();
     let mut j = 0;
     loop{
@@ -44,10 +37,11 @@ fn main() {
         console.clear();
         if j > 1500 {break;}
         j+=1;
-        rn.draw_circle(25, 50+(j/5)%30,50+(j)%30);
+        rn.draw_circle(25, 50+(j/5)%300, 10+(j)%300);
         rn.bits_to_px(); 
         print!("{}",rn.px_to_string().to_string_lossy());
         rn.reset_pbuff();
+        rn.reset_bbuff();
         console.clear();
     }
     
@@ -55,7 +49,7 @@ fn main() {
     console.setup_font(8);
     print!("{:?}", console);
 }
-
+/*
 
 struct ansi_color{
     pub foreground:u8,
@@ -91,4 +85,4 @@ fn set_background_color(col: &ansi_color){
     print!("\x1B[48;5;{}m", col.background as i32);
 }
 
-
+*/

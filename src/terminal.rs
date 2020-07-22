@@ -51,7 +51,7 @@ impl Terminal{
             panic!("Invalid Handle!!!");
         }
         self.console_handles[0] = hndl;
-
+        /*
         //I had to hack this together for four hours before it started working.
         let s = std::mem::size_of::<SECURITY_ATTRIBUTES>();
         let address = 0x0usize;
@@ -68,7 +68,7 @@ impl Terminal{
             panic!("Invalid Handle!!!");
         }
         self.console_handles[1] = h_new_screen_buffer;
-
+        */
 
     }
 
@@ -91,7 +91,6 @@ impl Terminal{
 
     pub fn resize_buffer(&mut self, width: i16, height: i16){
         unsafe{SetConsoleScreenBufferSize(self.console_handles[0], COORD{X:self.width as i16, Y:self.height as i16})};
-        unsafe{SetConsoleScreenBufferSize(self.console_handles[1], COORD{X:self.width as i16, Y:self.height as i16})};
     }
 
     pub fn resize_window(&mut self, width: i32, height: i32){
@@ -103,21 +102,13 @@ impl Terminal{
 
     pub fn write_buffer(&mut self, buff: &OsString){
         let rect = Box::new(SMALL_RECT{Top:0, Left:0, Right:self.width as i16, Bottom:self.height as i16});
-        //let rectptr: *mut SMALL_RECT = Box::<SMALL_RECT>::into_raw(rect) ;
         let bvec: Vec<u16> = buff.encode_wide().collect();
         unsafe{
-        WriteConsoleOutputCharacterW(self.console_handles[self.current_buffer as usize], 
+        WriteConsoleOutputCharacterW(self.console_handles[0], 
             bvec.as_ptr() , buff.len() as u32, COORD{X:0,Y:0}, 
             Box::<SMALL_RECT>::into_raw(rect) as *mut u32);
         }
 
-        
-    }
-
-    pub fn swap_buffers(&mut self){
-        self.current_buffer ^= 1;
-
-        unsafe{ SetConsoleActiveScreenBuffer(self.console_handles[self.current_buffer as usize]) };
         
     }
 
@@ -137,7 +128,6 @@ impl Terminal{
                 );
             cfi = &mut *cfi2;
             SetCurrentConsoleFontEx(self.console_handles[0], 0, cfi );
-            SetCurrentConsoleFontEx(self.console_handles[1], 0, cfi );
         }
     }
 
@@ -158,15 +148,6 @@ impl Terminal{
     pub fn show_cursor(&mut self){
         print!("\x1B[?25h");
     }
-    
-    pub fn _alt_buff(&mut self){
-        print!("\x1B[?1049h");
-    }
-    
-    pub fn _main_buff(&mut self){
-        print!("\x1B[?1049l");
-    }
-    
     }
 
 /*

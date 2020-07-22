@@ -30,7 +30,6 @@ impl fmt::Display for px{
     }
 }
 
-//
 
 impl Renderer{
 	pub fn new(width: i32, height: i32) -> Renderer{
@@ -61,10 +60,16 @@ impl Renderer{
                 let c = ansi_color{foreground: 0, background: 0};
                 let p = px{has_col: false, col: c};
                 self.p_buff[(j*self.width + i) as usize] = p;
-                self.b_buff[(j*self.width + i) as usize] = false;
             }
         }
 
+    }
+    pub fn reset_bbuff(&mut self){
+        for j in 0..=(self.height*2-1) {
+            for i in 0..=self.width-1 {
+                self.b_buff[(j*self.width+i) as usize] =false;
+            }
+        }
     }
 
     pub fn px_to_string(&mut self) -> OsString {
