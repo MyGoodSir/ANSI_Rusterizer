@@ -20,12 +20,12 @@ pub struct cell{
 pub struct px{
     pub has_col: bool,
     pub col: ansi_color,
-
+    pub char: char,
 }
 
 impl fmt::Display for px{
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        write!(fmt, "{}▀\x1b[0m", self.col)
+        write!(fmt, "{}{}\x1b[0m", self.col, self.char)
     }
 }
 
@@ -46,8 +46,8 @@ impl Renderer{
     pub fn init_pbuff(&mut self){
         for j in 0..=(self.height-1) {
             for i in 0..=self.width-1 {
-                let c = ansi_color{foreground: 0, background: 0};
-                let p = px{has_col: false, col: c};
+                let c = ansi_color{foreground: ColorValue::black, background: ColorValue::black};
+                let p = px{has_col: false, col: c, char:' '};
                 self.p_buff.push(p);
             }
         }
@@ -56,8 +56,8 @@ impl Renderer{
     pub fn reset_pbuff(&mut self){
         for j in 0..=(self.height-1) {
             for i in 0..=self.width-1 {
-                let c = ansi_color{foreground: 0, background: 0};
-                let p = px{has_col: false, col: c};
+                let c = ansi_color{foreground: ColorValue::black, background: ColorValue::black};
+                let p = px{has_col: false, col: c, char: ' '};
                 self.p_buff[(j*self.width + i) as usize] = p;
             }
         }
@@ -93,19 +93,27 @@ impl Renderer{
                     false => (),
                     true => { 
                         self.p_buff[((j/2)*self.width + i) as usize].has_col = true;
+                        self.p_buff[((j/2)*self.width + i) as usize].char = '▀';
                         match j%2{
                             1 => self.p_buff[((j/2)*self.width + i) as usize].col.background =
-                                         self.b_buff[(j*self.width+i) as usize].col as u8,
+                                         self.b_buff[(j*self.width+i) as usize].col,
 
                             _ => self.p_buff[((j/2)*self.width + i) as usize].col.foreground = 
-                                         self.b_buff[(j*self.width+i) as usize].col as u8,
+                                         self.b_buff[(j*self.width+i) as usize].col,
                         }
                     }
                 }
             }
         }
     }
-
+    pub fn draw_string(&mut self, text:String){
+        for ic in text.char_indices(){
+            let (i, c) = ic;
+            self.p_buff[i].has_col = true;
+            self.p_buff[i].col = ansi_color{foreground: ColorValue::white, background:ColorValue::black};
+            self.p_buff[i].char = c;
+        }
+    }
     
     pub fn draw_circle(&mut self, radius: i16, cx:i32, cy:i32){
         let r2: i32 = (radius*radius) as i32;
@@ -188,13 +196,13 @@ impl Renderer{
 
 #[derive(Copy, Clone)]
 pub struct ansi_color{
-    pub foreground:u8,
-    pub background:u8
+    pub foreground:ColorValue,
+    pub background:ColorValue
 }
 
 impl fmt::Display for ansi_color{
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        write!(fmt, "\x1B[38;5;{}m\x1B[48;5;{}m", self.foreground, self.background)
+        write!(fmt, "\x1B[38;5;{}m\x1B[48;5;{}m", self.foreground as u8, self.background as u8)
     }
 }
 #[derive(Copy, Clone)]
@@ -230,64 +238,3 @@ fn set_background_color(col: &ansi_color){
 }
 
 
-
-    /*
-    pub struct Cell {
-    pub color: Color,
-    pub char: char
-}
-impl Cell {
-    pub fn new() -> Self {
-        Self { color:Color::new(), char:' ' }
-    }
-}
-impl Display for Cell {
-    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        write!(fmt, "{}{}\x1b[0m", self.color, self.char)
-    }
-}
-
-pub struct TPixel {
-    pub cell: Cell
-}
-impl TPixel {
-    pub fn new() -> Self {
-        let mut cell = Cell::new();
-        cell.char = '▀';
-        Self { cell }
-    }
-
-    pub fn settop (&mut self, r:u8, g:u8, b:u8) {
-        self.cell.color.setfg(r, g, b);
-    }
-    pub fn gettop (&self) {
-        self.cell.color.getfg();
-    }
-
-    pub fn setbtm (&mut self, r:u8, g:u8, b:u8) {
-        self.cell.color.setbg(r, g, b);
-    }
-    pub fn getbtm (&self) {
-        self.cell.color.getbg();
-    }
-}
-impl Display for TPixel {
-    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        write!(fmt, "{}", self.cell)
-    }
-}
-*/
-
-/*
-    pub fn set (&mut self, x:f32, y:f32, c:(u8,u8,u8)) {
-        if y < self.h as f32 && x < self.w as f32 && x>=0. && y>=0. {
-            let (r, g, b) = c;
-            let cell = &mut self.grid[(y/2.) as usize][x as usize];
-            if y as usize %2 == 0 {
-                cell.settop(r, g, b)
-            } else {
-                cell.setbtm(r, g, b)
-            }
-        }
-    }
-    */

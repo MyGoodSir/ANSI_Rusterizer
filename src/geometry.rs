@@ -72,7 +72,7 @@ impl tri{
                 let mut p1 = v3::new(p1x,p1y,p1z);
                 let mut p2 = v3::new(p2x,p2y,p2z);
                 let mut p3 = v3::new(p3x,p3y,p3z);
-                tri{verts:[p1,p2,p3], col:ansi_color{foreground: 4, background: 4}}
+                tri{verts:[p1,p2,p3], col:ansi_color{foreground: ColorValue::blue, background: ColorValue::blue}}
     }
     pub fn translate(&mut self, tvec:v3){
         for i in 0..=2{
@@ -82,7 +82,7 @@ impl tri{
         }
     }
 }
-
+#[derive(Clone)]
 pub struct mesh{
     pub tris: Vec<tri>
 }

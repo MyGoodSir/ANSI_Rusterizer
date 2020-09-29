@@ -1,5 +1,6 @@
 use super::graphics::*;
 use super::geometry::*;
+use super::terminal::*;
 use std::fmt;
 use fmt::Formatter;
 use std::f32::consts::PI;
@@ -26,7 +27,7 @@ use std::f32::consts::PI;
  */
 
 
-
+ 
 pub struct Scene{
     pub width: u32,
     pub height: u32,
@@ -35,21 +36,62 @@ pub struct Scene{
     pub zfar:f32,
     pub znear:f32,
     pub proj_mat:mat4,
-
+    pub rend:Renderer,
+    pub console:Terminal,
     objects: Vec<mesh>
 }
 impl Scene{
 
     pub fn new(width: u32, height: u32) -> Self{
         let zero = v4{x: 0.0, y: 0.0, z: 0.0, w: 0.0};
-        Self{width:  width, height: height, 
+        let mut o = Self{width:  width, height: height, 
                    fov: 1.0 / (90.0 * 0.5 / 180.0 * PI).tan(),
                    asp_rt: ((height as f32)/(width as f32)),
                    zfar: 1000.0,
                    znear: 0.1,
                    proj_mat:mat4{ a1: zero, a2: zero, a3: zero, a4: zero},
+                   rend: Renderer::new(width as i32, height as i32),
+                   console: Terminal::new(),
                    objects: Vec::<mesh>::new()
-                }
+                };
+        o.init_console();
+        o.init_rend();
+        o.make_proj_matrix();
+        o.width = o.console.width;
+        o.height = o.console.height;
+        o
+    }
+    pub fn init_console(&mut self){
+        self.console.get_handles();
+        self.console.setup_font(4);
+        self.console.resize_window(self.width as i32, self.height as i32);
+        self.console.get_terminal_size();
+        self.console.resize_buffer(self.console.width as i16, self.console.height as i16);
+        self.console.clear();
+        self.console.hide_cursor();
+    }
+    pub fn init_rend(&mut self){
+        self.rend = Renderer::new(self.console.width as i32, self.console.height as i32);
+        self.rend.init_pbuff();
+    }
+    pub fn reset_frame(&mut self){
+        self.console.clear();
+        self.rend.reset_pbuff();
+        self.rend.reset_bbuff();
+    }
+    pub fn draw_objects_wireframe(&mut self){
+        let obj_itr: Vec<mesh> = self.objects.clone();
+        for obj in obj_itr{
+            let tris = self.get_proj_tris(obj);
+            for t in tris{
+                let ps = t.verts;
+                self.rend.draw_triangle(ps[0].x as i32, ps[0].y as i32, ps[1].x as i32 , ps[1].y as i32, ps[2].x as i32, ps[2].y as i32, t.col.foreground);
+            }
+        }
+    }
+    pub fn display(&mut self){
+        self.rend.bits_to_px(); 
+        print!("{}",self.rend.px_to_string());
     }
 
     pub fn add_object(&mut self, obj: mesh){
@@ -110,8 +152,8 @@ impl Scene{
             t.verts[2] = Self::rotate(t.verts[2]);
         }
     }
-    pub fn rasterize(&mut self) -> Vec<tri>{
-        let mut temp_obj = self.objects[0].tris.clone();
+    pub fn get_proj_tris(&mut self, obj:mesh) -> Vec<tri>{
+        let mut temp_obj = obj.tris.clone();
 
         for t in temp_obj.iter_mut(){
             t.translate(v3{x:0.0,y:0.0,z:1.25});
